@@ -1,0 +1,95 @@
+<!doctype html>
+<html lang="fr">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow">
+<title>Notre GR20</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,500;9..144,700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css">
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<!-- Écran de connexion -->
+<div id="ecranConnexion" class="ecran" hidden>
+  <div class="carte-connexion">
+    <div class="logo">GR<span>20</span></div>
+    <h1 data-titre></h1>
+    <p data-sous-titre></p>
+    <button id="btnConnexion" class="btn primaire grand">Se connecter avec Google</button>
+    <p id="msgConnexion" class="muted"></p>
+  </div>
+</div>
+
+<div id="app" hidden>
+  <header class="entete">
+    <div class="marque"><span class="logo petit">GR<span>20</span></span><div><h1 data-titre></h1><p data-sous-titre></p></div></div>
+    <nav class="actions">
+      <button id="btnDiapo" class="btn">▶ <span>Diaporama</span></button>
+      <button id="btnLivre" class="btn">📖 <span>Livre photo</span></button>
+      <button id="btnGerer" class="btn">⚙ <span>Gérer</span></button>
+      <button id="jaugeMini" class="jauge-mini" title="Espace gratuit utilisé"><i></i><b></b></button>
+      <button id="btnCompte" class="avatar" title="Se déconnecter"></button>
+    </nav>
+  </header>
+  <div id="bandeau" class="bandeau" hidden></div>
+
+  <main class="disposition">
+    <aside id="chapitres" class="chapitres" aria-label="Étapes"></aside>
+    <section class="centre">
+      <div id="carte"></div>
+      <div id="profil" class="profil"></div>
+    </section>
+    <section id="panneau" class="panneau"></section>
+  </main>
+</div>
+
+<!-- Visionneuse -->
+<div id="vision" class="vision" hidden>
+  <div class="vision-img"><img id="visImg" alt=""><button class="nav prec" id="visPrec" aria-label="Précédente">‹</button><button class="nav suiv" id="visSuiv" aria-label="Suivante">›</button></div>
+  <aside class="vision-info">
+    <button class="fermer" id="visFermer" aria-label="Fermer">✕</button>
+    <p class="vis-chap" id="visChap"></p>
+    <p class="vis-date" id="visDate"></p>
+    <label class="champ"><span>Légende</span><textarea id="visLegende" rows="2" placeholder="Ajoute une légende…"></textarea></label>
+    <div class="vis-actions">
+      <button class="btn" id="visLivre">📖 Ajouter au livre</button>
+      <button class="btn" id="visCarte">📍 Voir sur la carte</button>
+      <button class="btn" id="visTelecharger">⬇ Télécharger</button>
+      <button class="btn danger" id="visRetirer">🗑 Retirer du site</button>
+    </div>
+    <p class="muted petit" id="visMeta"></p>
+  </aside>
+</div>
+
+<!-- Diaporama -->
+<div id="diapo" class="diapo" hidden>
+  <div class="diapo-scene"><img id="diapoA" alt=""><img id="diapoB" alt=""></div>
+  <div class="diapo-titre" id="diapoTitre" hidden></div>
+  <div class="diapo-legende" id="diapoLegende"></div>
+  <div id="diapoCarte" class="diapo-carte"></div>
+  <div class="diapo-ctrl">
+    <button id="diapoPrec" aria-label="Précédente">⏮</button>
+    <button id="diapoPause" aria-label="Pause">⏸</button>
+    <button id="diapoSuiv" aria-label="Suivante">⏭</button>
+    <select id="diapoVitesse" aria-label="Vitesse"><option value="3500">Rapide</option><option value="5500" selected>Normal</option><option value="8000">Lent</option></select>
+    <span id="diapoCompteur"></span>
+    <button id="diapoFermer" aria-label="Fermer">✕</button>
+  </div>
+  <div class="diapo-barre"><i id="diapoProg"></i></div>
+</div>
+
+<!-- Fenêtres -->
+<dialog id="dlgLivre" class="fenetre large"></dialog>
+<dialog id="dlgGerer" class="fenetre large"></dialog>
+<div id="toast" class="toast"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+<script type="module" src="js/app.js"></script>
+</body>
+</html>
