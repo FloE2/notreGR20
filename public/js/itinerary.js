@@ -10,7 +10,7 @@ export const WAYPOINTS = {
   tighjettu:  { nom: 'Refuge de Tighjettu',          lat: 42.3600, lng: 8.9050, re: /tigh?j?i?ettu/i },
   ballone:    { nom: 'Bergerie de Ballone',          lat: 42.3529, lng: 8.9078, re: /ballone|u vallone/i },
   ciottulu:   { nom: 'Refuge de Ciottulu di i Mori', lat: 42.3230, lng: 8.8930, re: /ciottulu/i },
-  vergio:     { nom: 'Castel di Vergio',             lat: 42.2925, lng: 8.8710, re: /castel.{0,6}vergio|col de vergio/i },
+  vergio:     { nom: 'Castel di Vergio',             lat: 42.2925, lng: 8.8710, re: /castel.{0,6}vergio/i },
   manganu:    { nom: 'Refuge de Manganu',            lat: 42.2120, lng: 8.9480, re: /manganu/i },
   petrapiana: { nom: 'Refuge de Petra Piana',        lat: 42.1930, lng: 9.0240, re: /petra ?piana/i },
   onda:       { nom: "Refuge de l'Onda",             lat: 42.1630, lng: 9.0600, re: /onda/i },

@@ -14,7 +14,7 @@ export async function creerStore() {
 
 function normaliser(d) {
   d = d || {};
-  return { chapitres: d.chapitres || {}, photos: d.photos || {}, usage: { bytes: d.usage?.bytes || 0, count: d.usage?.count || 0 } };
+  return { chapitres: d.chapitres || {}, photos: d.photos || {}, lieux: d.lieux || {}, usage: { bytes: d.usage?.bytes || 0, count: d.usage?.count || 0 } };
 }
 const blobEnBase64 = blob => new Promise((ok, ko) => {
   const r = new FileReader();
@@ -84,6 +84,7 @@ class FirebaseStore {
   }
 
   async majPhoto(id, champs) { await this._maj(Object.entries(champs).map(([k, v]) => [['photos', id, k], v])); }
+  async majLieu(k, v) { await this._assurerIndex(); await this._maj([[['lieux', k], v]]); }
   async majChapitre(id, champs) {
     await this._assurerIndex();
     await this._maj(Object.entries(champs).map(([k, v]) => [['chapitres', id, k], v]));
@@ -195,6 +196,7 @@ class ApercuStore {
     this._emettre();
   }
   async oublierRetrait(id) { delete this.idx.photos[id]; this._memo(m => { if (m.photos) delete m.photos[id]; }); this._emettre(); }
+  async majLieu(k, v) { (this.idx.lieux ||= {})[k] = v; this._emettre(); }
   async lireTrace() { return this.traceLocale; }
   async enregistrerTrace(t) { this.traceLocale = t; this._memo(m => { m.trace = t; }); }
 }
