@@ -61,17 +61,33 @@ function simplifier(pts, tolM = 6) {
   return pts.filter((_, i) => garde[i]);
 }
 
-/* ───────────── altitudes IGN (Géoplateforme) ───────────── */
+/* ───────────── altitudes : IGN (Géoplateforme), sinon Open-Meteo ───────────── */
+async function lotIGN(sl) {
+  const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rgealti_world&zonly=true&delimiter=,'
+    + '&lon=' + sl.map(p => p[1].toFixed(5)).join(',') + '&lat=' + sl.map(p => p[0].toFixed(5)).join(',');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('IGN HTTP ' + r.status);
+  const j = await r.json();
+  return j.elevations.map(e => (typeof e === 'object' ? e.z : e));
+}
+async function lotOpenMeteo(sl) {
+  const url = 'https://api.open-meteo.com/v1/elevation?latitude=' + sl.map(p => p[0].toFixed(5)).join(',') + '&longitude=' + sl.map(p => p[1].toFixed(5)).join(',');
+  const r = await fetch(url);
+  if (!r.ok) throw new Error('Open-Meteo HTTP ' + r.status);
+  return (await r.json()).elevation;
+}
+let sourceAlti = null;
 async function altitudes(pts, log) {
   const out = [];
   for (let i = 0; i < pts.length; i += 100) {
     const sl = pts.slice(i, i + 100);
-    const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rgealti_world&zonly=true'
-      + '&lon=' + sl.map(p => p[1].toFixed(5)).join('|') + '&lat=' + sl.map(p => p[0].toFixed(5)).join('|');
-    const r = await fetch(url);
-    if (!r.ok) throw new Error('Service d’altitude IGN indisponible (HTTP ' + r.status + ')');
-    const j = await r.json();
-    for (const e of j.elevations) out.push(typeof e === 'object' ? e.z : e);
+    let z = null;
+    if (sourceAlti !== 'openmeteo') {
+      try { z = await lotIGN(sl); sourceAlti = 'ign'; }
+      catch (e) { log?.(`   (altitudes IGN indisponibles : ${e.message} → service Open-Meteo)`); sourceAlti = 'openmeteo'; }
+    }
+    if (!z) z = await lotOpenMeteo(sl);
+    out.push(...z);
     log?.(`… altitudes ${Math.min(i + 100, pts.length)} / ${pts.length}`);
   }
   for (let i = 0; i < out.length; i++) if (!(out[i] > -1000)) out[i] = i ? out[i - 1] : 0;
