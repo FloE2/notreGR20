@@ -106,10 +106,23 @@ $('#chapitres').addEventListener('click', e => { const el = e.target.closest('[d
 /* ───────────────────────── carte ───────────────────────── */
 function fondsIGN() {
   const wmts = (layer, fmt, base = 'https://data.geopf.fr/wmts?') => `${base}SERVICE=WMTS&REQUEST=GetTile&VERSION=1.0.0&LAYER=${layer}&STYLE=normal&TILEMATRIXSET=PM&TILEMATRIX={z}&TILEROW={y}&TILECOL={x}&FORMAT=${fmt}`;
+  // si l'IGN refuse une tuile, on la remplace par celle d'OpenStreetMap (évite les trous dans la carte)
+  const osm = c => `https://tile.openstreetmap.org/${c.z}/${c.x}/${c.y}.png`;
+  const planIGN = c => wmts('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png').replace('{z}', c.z).replace('{x}', c.x).replace('{y}', c.y);
+  const repli = (couche, ...secours) => { secours.push(osm); return couche.on('tileerror', e => {
+    const n = +(e.tile.dataset.repli || 0);
+    if (n >= secours.length) return;
+    e.tile.dataset.repli = n + 1;
+    e.tile.src = secours[n](e.coords);
+  }); };
   return {
-    plan: L.tileLayer(wmts('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'), { maxZoom: 19, attribution: '© IGN' }),
-    scan: L.tileLayer(wmts('GEOGRAPHICALGRIDSYSTEMS.MAPS', 'image/jpeg', 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&'), { maxZoom: 18, maxNativeZoom: 16, attribution: '© IGN – SCAN 25' }),
-    ortho: L.tileLayer(wmts('ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg'), { maxZoom: 19, attribution: '© IGN' }),
+    plan: repli(L.tileLayer(wmts('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'), { maxZoom: 19, attribution: '© IGN © OpenStreetMap' })),
+    // TOP 25 quand on zoome ; Plan IGN en vue éloignée (la mer y est bleue, pas de carrés blancs)
+    scan: L.layerGroup([
+      repli(L.tileLayer(wmts('GEOGRAPHICALGRIDSYSTEMS.PLANIGNV2', 'image/png'), { maxZoom: 10, attribution: '© IGN' })),
+      repli(L.tileLayer(wmts('GEOGRAPHICALGRIDSYSTEMS.MAPS', 'image/jpeg', 'https://data.geopf.fr/private/wmts?apikey=ign_scan_ws&'), { minZoom: 11, maxZoom: 18, maxNativeZoom: 16, attribution: '© IGN – SCAN 25' }), planIGN),
+    ]),
+    ortho: repli(L.tileLayer(wmts('ORTHOIMAGERY.ORTHOPHOTOS', 'image/jpeg'), { maxZoom: 19, attribution: '© IGN' })),
     topo: L.tileLayer('https://{s}.tile.opentopomap.org/{z}/{x}/{y}.png', { maxZoom: 17, attribution: '© OpenTopoMap © contributeurs OpenStreetMap' }),
   };
 }
@@ -117,7 +130,7 @@ function initCarte() {
   if (map) return;
   map = L.map('carte', { zoomSnap: 0.5 }).setView([42.15, 9.05], 9);
   const f = fondsIGN();
-  f.plan.addTo(map);
+  f.scan.addTo(map);
   couches.trace = L.layerGroup().addTo(map);
   couches.nuits = L.layerGroup().addTo(map);
   couches.photos = L.layerGroup().addTo(map);
@@ -125,7 +138,14 @@ function initCarte() {
   L.control.layers({ 'Plan IGN': f.plan, 'Carte IGN TOP 25': f.scan, 'Photo aérienne IGN': f.ortho, 'OpenTopoMap': f.topo },
     { 'Tracé': couches.trace, 'Lieux de nuit': couches.nuits, 'Photos': couches.photos }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
-  f.scan.on('tileerror', () => { if (!f.scan._prev) { f.scan._prev = 1; toast('La carte TOP 25 n’est pas accessible librement : utilise le Plan IGN.', 5000); } });
+  map.on('click', e => {
+    if (!placementLieu) return;
+    const k = placementLieu; finPlacement();
+    store.majLieu(k, { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) }).then(() => {
+      if (confirm(`${WAYPOINTS[k].nom} est placé.\n\nReconstruire le tracé maintenant pour en tenir compte ?`)) { ouvrirGerer(); lancerTrace(); }
+      else toast('Lieu enregistré : pense à reconstruire le tracé dans ⚙ Gérer');
+    }).catch(err => toast('Erreur : ' + err.message));
+  });
   new ResizeObserver(() => { map.invalidateSize(); rendreProfil(); }).observe($('#carte'));
 }
 
@@ -512,7 +532,7 @@ document.addEventListener('keydown', e => {
   const i = CHAPITRES.findIndex(c => c.id === chapSel);
   if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); choisir(CHAPITRES[Math.min(i + 1, CHAPITRES.length - 1)].id); }
   if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); i > 0 ? choisir(CHAPITRES[i - 1].id) : choisir(null); }
-  if (e.key === 'Escape') choisir(null);
+  if (e.key === 'Escape') { if (placementLieu) { finPlacement(); toast('Placement annulé'); } else choisir(null); }
 });
 
 /* ───────────────────────── livre photo ───────────────────────── */
@@ -587,6 +607,8 @@ function majLivreCompteurs() {
 $('#btnLivre').onclick = ouvrirLivre;
 
 /* ───────────────────────── gérer ───────────────────────── */
+let placementLieu = null;
+function finPlacement() { placementLieu = null; $('#carte').style.cursor = ''; bandeau(store.mode === 'apercu' ? 'Mode aperçu : rien n’est enregistré en ligne.' : ''); }
 let importEnCours = false;
 function ouvrirGerer() { rendreGerer(false); $('#dlgGerer').showModal(); }
 function rendreGerer(majSeule) {
@@ -621,6 +643,9 @@ function rendreGerer(majSeule) {
         <p class="muted petit" style="margin:10px 0 4px">Une étape n’est pas juste ? Remplace-la par un fichier GPX (Visorando, Komoot…) :</p>
         <div class="ligne-actions"><select id="gEtapeGPX">${CHAPITRES.filter(c => c.type === 'etape').map(c => `<option value="${c.id}">${esc(c.titre)} · ${esc(c.de)} → ${esc(c.a)}</option>`).join('')}</select>
           <label class="btn">Choisir un GPX<input type="file" id="gFichierGPX" accept=".gpx,application/gpx+xml" hidden></label></div>
+        <p class="muted petit" style="margin:12px 0 4px">Un lieu de nuit est mal placé ? Place-le toi-même sur la carte, puis reconstruis le tracé :</p>
+        <div class="ligne-actions"><select id="gLieu">${Object.entries(WAYPOINTS).map(([k, w]) => `<option value="${k}">${esc(w.nom)}${index.lieux?.[k] ? ' (placé à la main ✓)' : ''}</option>`).join('')}</select>
+          <button class="btn" id="gPlacer">📍 Placer sur la carte</button></div>
         <div class="journal" id="gTraceJournal" hidden></div>
       </div>
       <div class="fen-section"><h3>Photos retirées</h3><div id="gRetirees">${htmlRetirees(retirees)}</div></div>
@@ -631,6 +656,14 @@ function rendreGerer(majSeule) {
   dlg.querySelector('[data-fermer]').onclick = () => { if (!importEnCours) dlg.close(); };
   $('#gZip').onchange = e => { if (e.target.files[0]) lancerImport(e.target.files[0]); e.target.value = ''; };
   $('#gTrace').onclick = lancerTrace;
+  $('#gPlacer').onclick = () => {
+    const k = $('#gLieu').value, p = index.lieux?.[k] || trace?.lieux?.[k] || WAYPOINTS[k];
+    $('#dlgGerer').close();
+    placementLieu = k;
+    $('#carte').style.cursor = 'crosshair';
+    bandeau(`📍 Clique sur la carte à l’emplacement exact de « ${WAYPOINTS[k].nom} » (zoome si besoin). Échap pour annuler.`);
+    map.setView([p.lat, p.lng], 15);
+  };
   $('#gGPX') && ($('#gGPX').onclick = () => telecharger(new Blob([traceEnGPX(trace)], { type: 'application/gpx+xml' }), 'gr20-notre-trace.gpx'));
   $('#gFichierGPX').onchange = async e => {
     const f = e.target.files[0]; e.target.value = ''; if (!f) return;
@@ -683,7 +716,7 @@ async function lancerTrace() {
   b.disabled = true; jr.hidden = false; jr.textContent = '';
   const log = m => { jr.textContent += m + '\n'; jr.scrollTop = jr.scrollHeight; };
   try {
-    const t = await construireTrace(log);
+    const t = await construireTrace(log, index.lieux || {});
     const taille = JSON.stringify(t).length;
     if (taille > 950000) throw new Error('Tracé trop volumineux pour Firestore (' + fmtMo(taille) + ')');
     await store.enregistrerTrace(t);

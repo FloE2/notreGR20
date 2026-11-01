@@ -76,19 +76,28 @@ async function lotOpenMeteo(sl) {
   if (!r.ok) throw new Error('Open-Meteo HTTP ' + r.status);
   return (await r.json()).elevation;
 }
-let sourceAlti = null;
+const pause = ms => new Promise(ok => setTimeout(ok, ms));
+async function essayer(fn, sl, n) {
+  let err;
+  for (let t = 0; t < n; t++) {
+    try { return await fn(sl); } catch (e) { err = e; await pause(1000 * (t + 1)); }
+  }
+  throw err;
+}
 async function altitudes(pts, log) {
   const out = [];
   for (let i = 0; i < pts.length; i += 100) {
     const sl = pts.slice(i, i + 100);
-    let z = null;
-    if (sourceAlti !== 'openmeteo') {
-      try { z = await lotIGN(sl); sourceAlti = 'ign'; }
-      catch (e) { log?.(`   (altitudes IGN indisponibles : ${e.message} → service Open-Meteo)`); sourceAlti = 'openmeteo'; }
+    let z;
+    try { z = await essayer(lotIGN, sl, 4); }
+    catch (e1) {
+      log?.(`   (IGN : ${e1.message} → service de secours Open-Meteo)`);
+      try { z = await essayer(lotOpenMeteo, sl, 3); }
+      catch (e2) { throw new Error(`altitudes indisponibles (IGN : ${e1.message}, Open-Meteo : ${e2.message})`); }
     }
-    if (!z) z = await lotOpenMeteo(sl);
     out.push(...z);
     log?.(`… altitudes ${Math.min(i + 100, pts.length)} / ${pts.length}`);
+    await pause(250);   // ménage le service : pas plus de 4 demandes par seconde
   }
   for (let i = 0; i < out.length; i++) if (!(out[i] > -1000)) out[i] = i ? out[i - 1] : 0;
   return out;
@@ -135,7 +144,7 @@ export const paires = flat => { const o = []; for (let i = 0; i < flat.length; i
 const aplatir = pts => pts.flatMap(p => [+p[0].toFixed(5), +p[1].toFixed(5)]);
 
 /* ───────────── construction complète depuis OpenStreetMap ───────────── */
-export async function construireTrace(log) {
+export async function construireTrace(log, forces = {}) {
   log('1/4 · Téléchargement des sentiers du GR20 (peut prendre 1 minute)…');
   const j = await overpass(
     `[out:json][timeout:180];relation["route"="hiking"]["name"~"GR ?20",i](${BBOX})->.r;(.r;rel(r.r);)->.all;.all out body;way(r.all);out body;>;out skel qt;`, log);
@@ -188,6 +197,7 @@ export async function construireTrace(log) {
 
   const precis = {}, avert = [];
   for (const [k, w] of Object.entries(WAYPOINTS)) {
+    if (forces[k]) { precis[k] = { lat: forces[k].lat, lng: forces[k].lng, nomOSM: 'placé à la main' }; continue; }
     const cands = lieux.filter(l => w.re.test(l.nom)).map(l => ({ ...l, d: distKm([w.lat, w.lng], [l.lat, l.lng]) })).filter(l => l.d < 8).sort((a, b) => a.d - b.d);
     if (cands.length) precis[k] = { lat: cands[0].lat, lng: cands[0].lng, nomOSM: cands[0].nom };
     else if (!w.optionnel) { precis[k] = { lat: w.lat, lng: w.lng }; avert.push(`${w.nom} : position approximative`); }
@@ -245,7 +255,8 @@ export async function construireTrace(log) {
 
   log('4/4 · Altitudes (service IGN)…');
   for (const [id, e] of Object.entries(etapes)) {
-    try { Object.assign(e, await profilEtape(e.parts)); }
+    log(`   Profil ${id.replace('e', 'étape ')}…`);
+    try { Object.assign(e, await profilEtape(e.parts, log)); }
     catch (err) { avert.push(`Profil de ${id} indisponible : ${err.message}`); Object.assign(e, { prof: [], km: 0, dplus: 0, dmoins: 0 }); }
   }
   log('Terminé.');
