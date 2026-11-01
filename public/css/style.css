@@ -215,3 +215,72 @@ kbd{font:11px var(--texte);border:1px solid var(--trait);border-radius:4px;paddi
   .diapo-carte{width:140px;height:110px;right:10px;bottom:64px}
   .diapo-legende{left:12px;max-width:55%;font-size:14px}
 }
+
+/* ═══════════════ Thème v2 : moins de blanc, des cadres ═══════════════ */
+:root{
+  --fond:#e4dccb; --entete:#1d2925; --entete-txt:#f3eee2; --mer-carte:#aad3e6;
+  --ombre-cadre:0 1px 2px rgba(45,38,25,.06), 0 6px 22px rgba(45,38,25,.10);
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){ --fond:#0f1312; --entete:#0a0d0c; --mer-carte:#2b4a5a; --ombre-cadre:0 6px 22px rgba(0,0,0,.45); }
+}
+body{background:
+  radial-gradient(900px 500px at 0% 0%, rgba(47,110,84,.16), transparent 60%),
+  radial-gradient(900px 600px at 100% 100%, rgba(196,98,45,.14), transparent 60%), var(--fond)}
+
+/* bandeau du haut sombre */
+.entete{background:linear-gradient(90deg, #1d2925, #24342e 55%, #3a2f25);color:var(--entete-txt);border-bottom:0;box-shadow:0 2px 10px rgba(0,0,0,.18);position:relative;z-index:600}
+.entete .logo{color:var(--entete-txt)}
+.entete .logo span{color:#e38a57}
+.marque h1{color:var(--entete-txt)}
+.marque p{color:rgba(243,238,226,.68)}
+.entete .btn{background:rgba(255,255,255,.07);border-color:rgba(255,255,255,.16);color:var(--entete-txt)}
+.entete .btn:hover{background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.5)}
+.jauge-mini{color:rgba(243,238,226,.75)}
+.jauge-mini i{background:rgba(255,255,255,.18)}
+.jauge-mini i::after{background:#7fc4a2}
+.avatar{border-color:rgba(255,255,255,.3)}
+
+/* trois cadres flottants */
+.disposition{gap:14px;padding:14px}
+.chapitres,.centre,.panneau{border:0;border-radius:18px;box-shadow:var(--ombre-cadre);overflow:hidden}
+.chapitres{overflow:auto;background:linear-gradient(180deg, var(--carte) 0%, var(--papier) 100%);padding:8px 0}
+.panneau{overflow:auto;background:var(--carte)}
+.centre{background:var(--carte)}
+#carte,.leaflet-container{background:var(--mer-carte)}
+.profil{border-top:0;background:linear-gradient(180deg, var(--papier-2), var(--carte))}
+
+/* liste des étapes : pastilles teintées */
+.chap{margin:2px 8px;padding:9px 10px;border-radius:12px;border-left:0;transition:background .15s}
+.chap:hover{background:color-mix(in srgb, var(--c, #888) 10%, transparent)}
+.chap.actif{background:color-mix(in srgb, var(--c, #888) 18%, var(--carte));box-shadow:inset 4px 0 0 var(--c, var(--encre))}
+.chap .pastille{box-shadow:0 2px 6px color-mix(in srgb, var(--c, #000) 40%, transparent)}
+.chap-tout{margin:4px 12px 10px;width:calc(100% - 24px)}
+.chap-sep{padding:12px 18px 4px}
+
+/* panneau : en-tête coloré par l'étape, blocs en cartes */
+.pan-tete{border-bottom:0;padding:22px 22px 18px;
+  background:linear-gradient(140deg, color-mix(in srgb, var(--c, #2f6e54) 30%, var(--carte)) 0%, color-mix(in srgb, var(--c, #2f6e54) 8%, var(--carte)) 70%)}
+.pan-tete:not([style]){background:linear-gradient(140deg, rgba(47,110,84,.30) 0%, rgba(196,98,45,.16) 60%, var(--carte) 100%)}
+.pan-tete h2{font-size:26px}
+.chiffres div{background:color-mix(in srgb, var(--carte) 70%, transparent);padding:6px 12px;border-radius:10px}
+.pan-bloc{border-bottom:0;margin:12px 14px;padding:14px 16px;background:var(--papier);border-radius:14px}
+.pan-bloc h3{color:color-mix(in srgb, var(--encre) 85%, var(--c, var(--maquis)))}
+.carnet{background:var(--carte) repeating-linear-gradient(transparent 0 26px, color-mix(in srgb, var(--trait) 70%, transparent) 26px 27px);line-height:27px;padding:4px 10px;border:1px solid var(--trait);min-height:110px;font-family:var(--titre);font-size:15px}
+.vignette{border-radius:10px;box-shadow:0 2px 6px rgba(0,0,0,.18)}
+.galerie{gap:8px}
+.bandeau{border-radius:0}
+
+/* fenêtres et visionneuse dans le même esprit */
+.fen-tete{background:linear-gradient(90deg, color-mix(in srgb, var(--maquis) 14%, var(--carte)), var(--carte))}
+.fen-section{background:var(--papier);border-radius:14px;padding:14px 16px}
+.vision-info{background:linear-gradient(180deg, color-mix(in srgb, var(--c, #2f6e54) 16%, var(--carte)), var(--carte) 40%)}
+
+@media (max-width:860px){
+  .disposition{padding:8px;gap:8px}
+  .chapitres{border-radius:14px;padding:6px;top:6px}
+  .chap{margin:0;min-width:64px}
+  .chap.actif{box-shadow:inset 0 -3px 0 var(--c, var(--encre))}
+}
+
+.manque{color:var(--ocre);font-weight:600}

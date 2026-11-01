@@ -38,7 +38,9 @@ export async function importerExport(store, index, fichier, log, progression) {
     const meta = { chapitre: chap, date: p.date || null, lat: p.lat ?? null, lng: p.lng ?? null, src: p.source_lieu || null, appareil: p.appareil || '', original: p.original || '' };
     if (ex) {
       const maj = {};
-      for (const k of ['chapitre', 'date', 'lat', 'lng', 'src']) if ((ex[k] ?? null) !== meta[k]) maj[k] = meta[k];
+      // une photo replacée sur le site garde la position choisie sur le site
+      const champs = ex.src === 'site' ? ['chapitre', 'date'] : ['chapitre', 'date', 'lat', 'lng', 'src'];
+      for (const k of champs) if ((ex[k] ?? null) !== meta[k]) maj[k] = meta[k];
       if (p.legende && !ex.legende) maj.legende = p.legende;
       if (Object.keys(maj).length) { await store.majPhoto(id, maj); st.majs++; } else st.identiques++;
       continue;

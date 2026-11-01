@@ -1,7 +1,7 @@
 import { CHAPITRES, CHAP, WAYPOINTS, couleurEtape } from './itinerary.js';
 import { creerStore, LIMITE_OCTETS } from './store.js';
 import { emailsAutorises, titreSite, sousTitre } from './config.js';
-import { construireTrace, etapeDepuisGPX, traceEnGPX, projeter, paires, distKm } from './trace.js';
+import { construireTrace, completerProfils, etapeDepuisGPX, traceEnGPX, projeter, paires, distKm } from './trace.js';
 import { importerExport } from './import.js';
 import { FORMATS, dpiEstime, genererPDF, listeHD } from './book.js';
 
@@ -92,9 +92,10 @@ function rendreChapitres() {
   const ligne = c => {
     const n = photosDe(c.id).length, info = index.chapitres[c.id] || {}, et = trace?.etapes?.[c.id];
     const meta = [info.date ? fmtJour(info.date, false) : '', n ? `${n} photo${n > 1 ? 's' : ''}` : '', et?.km ? `${fmtNb(et.km)} km` : ''].filter(Boolean).join(' · ');
+    const manque = c.type === 'etape' && trace && !et?.prof?.length ? `${meta ? ' · ' : ''}<span class="manque">⛰ profil manquant</span>` : '';
     return `<div class="chap ${chapSel === c.id ? 'actif' : ''} ${n ? '' : 'vide'}" data-id="${c.id}" style="--c:${couleur(c)}">
       <div class="pastille">${icone(c)}</div>
-      <div><div class="t"><span class="long">${esc(c.titre)}</span><span class="court">${esc(c.type === 'etape' ? 'Étape ' + c.n : c.type === 'avant' ? 'Avant' : 'Après')}</span></div><div class="s">${esc(c.de ? `${c.de} → ${c.a}` : c.sous)}</div>${meta ? `<div class="m">${esc(meta)}</div>` : ''}</div></div>`;
+      <div><div class="t"><span class="long">${esc(c.titre)}</span><span class="court">${esc(c.type === 'etape' ? 'Étape ' + c.n : c.type === 'avant' ? 'Avant' : 'Après')}</span></div><div class="s">${esc(c.de ? `${c.de} → ${c.a}` : c.sous)}</div>${meta || manque ? `<div class="m">${esc(meta)}${manque}</div>` : ''}</div></div>`;
   };
   $('#chapitres').innerHTML =
     `<button class="btn chap-tout ${chapSel ? '' : 'actif'}" data-id="">🗺 Vue d’ensemble</button>` +
@@ -139,6 +140,13 @@ function initCarte() {
     { 'Tracé': couches.trace, 'Lieux de nuit': couches.nuits, 'Photos': couches.photos }).addTo(map);
   L.control.scale({ imperial: false }).addTo(map);
   map.on('click', e => {
+    if (placementPhoto) {
+      const id = placementPhoto; finPlacement();
+      store.majPhoto(id, { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6), src: 'site' })
+        .then(() => { toast('📍 Photo replacée'); setTimeout(() => marqueurs.get(id)?.openTooltip(), 300); })
+        .catch(err => toast('Erreur : ' + err.message));
+      return;
+    }
     if (!placementLieu) return;
     const k = placementLieu; finPlacement();
     store.majLieu(k, { lat: +e.latlng.lat.toFixed(6), lng: +e.latlng.lng.toFixed(6) }).then(() => {
@@ -242,7 +250,9 @@ function rendreProfil() {
   const d = donneesProfil();
   if (!d) {
     const c = chapSel && CHAP[chapSel];
-    el.innerHTML = `<div class="vide-profil">${c && c.type !== 'etape' ? 'Pas de profil pour ce chapitre.' : 'Le profil altimétrique apparaîtra une fois le tracé construit (⚙ Gérer → Tracé).'}</div>`;
+    el.innerHTML = `<div class="vide-profil">${c && c.type !== 'etape' ? 'Pas de profil pour ce chapitre.'
+      : trace ? '<span><b class="manque">⛰ Profil manquant pour cette étape.</b><br>Va dans ⚙ Gérer → « Compléter les profils manquants ».</span>'
+      : 'Le profil altimétrique apparaîtra une fois le tracé construit (⚙ Gérer → Tracé).'}</div>`;
     return;
   }
   const W = el.clientWidth, H = el.clientHeight, ml = 44, mr = 12, mt = 16, mb = 20;
@@ -358,6 +368,7 @@ function rendreVueEnsemble(el) {
         ${dplus ? `<div><b>+${fmtNb(dplus)} m</b><span>de dénivelé</span></div>` : ''}
         <div><b>${nb}</b><span>photos</span></div>
       </div>
+      ${trace && etapes.some(c => !trace.etapes?.[c.id]?.prof?.length) ? `<p style="margin:10px 0 0"><b class="manque">⛰ ${etapes.filter(c => !trace.etapes?.[c.id]?.prof?.length).length} profil(s) manquant(s)</b> <span class="muted">→ ⚙ Gérer → « Compléter les profils manquants »</span></p>` : ''}
       ${d1 && d13 ? `<p class="muted" style="margin:10px 0 0">Du ${esc(fmtJour(d1))} au ${esc(fmtJour(d13))}</p>` : ''}
       <div class="pan-nav">${nb ? '<button class="btn primaire" id="diapoTout">▶ Revivre tout le voyage</button>' : ''}</div>
     </div>
@@ -409,8 +420,9 @@ async function afficherVision() {
   $('#visLivre').textContent = p.livre ? '📖 Dans le livre ✓' : '📖 Ajouter au livre';
   $('#visLivre').classList.toggle('actif', !!p.livre);
   $('#visCarte').disabled = p.lat == null;
+  $('#visPlacer').textContent = p.lat == null ? '📍 Placer sur la carte' : '📍 Replacer sur la carte';
   $('#visMeta').innerHTML = [`Photo ${vis.i + 1} / ${vis.liste.length}`, p.appareil ? esc(p.appareil) : '',
-    p.lat != null ? (p.src === 'gps' ? 'Position GPS de la photo' : 'Position placée à la main') : 'Lieu inconnu',
+    p.lat != null ? (p.src === 'gps' ? 'Position GPS de la photo' : p.src === 'site' ? 'Position replacée sur le site' : 'Position placée à la main') : 'Lieu inconnu',
     p.original ? `Original (pleine résolution) : <code>${esc(p.original)}</code>` : ''].filter(Boolean).join('<br>');
   const img = $('#visImg');
   img.src = await store.urlMiniature(id) || '';
@@ -427,6 +439,14 @@ $('#visFermer').onclick = fermerVision;
 const sauverLegende = debounce((id, v) => store.majPhoto(id, { legende: v }).catch(e => toast('Erreur : ' + e.message)), 800);
 $('#visLegende').oninput = e => sauverLegende(vis.liste[vis.i], e.target.value);
 $('#visLivre').onclick = async () => { const id = vis.liste[vis.i], p = index.photos[id]; await store.majPhoto(id, { livre: !p.livre }); toast(!p.livre ? 'Ajoutée au livre photo' : 'Retirée du livre photo'); };
+$('#visPlacer').onclick = () => {
+  const id = vis.liste[vis.i], p = index.photos[id]; fermerVision();
+  if (chapSel !== p.chapitre) choisir(p.chapitre, { ajuster: p.lat == null });
+  if (p.lat != null) map.setView([p.lat, p.lng], Math.max(map.getZoom(), 14));
+  placementPhoto = id;
+  $('#carte').style.cursor = 'crosshair';
+  bandeau('📍 Clique sur la carte à l’endroit où cette photo a été prise (zoome si besoin). Échap pour annuler.');
+};
 $('#visCarte').onclick = () => {
   const id = vis.liste[vis.i], p = index.photos[id]; fermerVision();
   if (chapSel !== p.chapitre) choisir(p.chapitre, { ajuster: false });
@@ -532,7 +552,7 @@ document.addEventListener('keydown', e => {
   const i = CHAPITRES.findIndex(c => c.id === chapSel);
   if (e.key === 'ArrowDown' || e.key === 'ArrowRight') { e.preventDefault(); choisir(CHAPITRES[Math.min(i + 1, CHAPITRES.length - 1)].id); }
   if (e.key === 'ArrowUp' || e.key === 'ArrowLeft') { e.preventDefault(); i > 0 ? choisir(CHAPITRES[i - 1].id) : choisir(null); }
-  if (e.key === 'Escape') { if (placementLieu) { finPlacement(); toast('Placement annulé'); } else choisir(null); }
+  if (e.key === 'Escape') { if (placementLieu || placementPhoto) { finPlacement(); toast('Placement annulé'); } else choisir(null); }
 });
 
 /* ───────────────────────── livre photo ───────────────────────── */
@@ -607,8 +627,8 @@ function majLivreCompteurs() {
 $('#btnLivre').onclick = ouvrirLivre;
 
 /* ───────────────────────── gérer ───────────────────────── */
-let placementLieu = null;
-function finPlacement() { placementLieu = null; $('#carte').style.cursor = ''; bandeau(store.mode === 'apercu' ? 'Mode aperçu : rien n’est enregistré en ligne.' : ''); }
+let placementLieu = null, placementPhoto = null;
+function finPlacement() { placementLieu = null; placementPhoto = null; $('#carte').style.cursor = ''; bandeau(store.mode === 'apercu' ? 'Mode aperçu : rien n’est enregistré en ligne.' : ''); }
 let importEnCours = false;
 function ouvrirGerer() { rendreGerer(false); $('#dlgGerer').showModal(); }
 function rendreGerer(majSeule) {
@@ -638,6 +658,7 @@ function rendreGerer(majSeule) {
         ${trace?.avertissements?.length ? `<details><summary class="muted">${trace.avertissements.length} remarque(s)</summary><ul class="petit">${trace.avertissements.map(a => `<li>${esc(a)}</li>`).join('')}</ul></details>` : ''}
         <div class="ligne-actions" style="margin-top:8px">
           <button class="btn primaire" id="gTrace">${trace ? '↻ Reconstruire' : 'Construire'} le tracé (OpenStreetMap + altitudes IGN)</button>
+          ${trace && Object.values(trace.etapes || {}).some(e => !e.prof?.length || !e.km) ? '<button class="btn" id="gProfils">⛰ Compléter les profils manquants</button>' : ''}
           ${trace ? '<button class="btn" id="gGPX">⬇ Télécharger le tracé (GPX)</button>' : ''}
         </div>
         <p class="muted petit" style="margin:10px 0 4px">Une étape n’est pas juste ? Remplace-la par un fichier GPX (Visorando, Komoot…) :</p>
@@ -656,6 +677,17 @@ function rendreGerer(majSeule) {
   dlg.querySelector('[data-fermer]').onclick = () => { if (!importEnCours) dlg.close(); };
   $('#gZip').onchange = e => { if (e.target.files[0]) lancerImport(e.target.files[0]); e.target.value = ''; };
   $('#gTrace').onclick = lancerTrace;
+  $('#gProfils') && ($('#gProfils').onclick = async () => {
+    const b = $('#gProfils'), jr = $('#gTraceJournal'); b.disabled = true; jr.hidden = false; jr.textContent = '';
+    const log = m => { jr.textContent += m + '\n'; jr.scrollTop = jr.scrollHeight; };
+    try {
+      const r = await completerProfils(trace, log);
+      await store.enregistrerTrace(r.trace); trace = r.trace; cacheProj.clear();
+      log(`\nTerminé : ${r.ok} profil(s) ajouté(s)${r.ko ? `, ${r.ko} toujours manquant(s) — réessaie dans quelques minutes` : ''}.`);
+      rendreTout(false);
+    } catch (e) { log('✕ ' + e.message); }
+    b.disabled = false;
+  });
   $('#gPlacer').onclick = () => {
     const k = $('#gLieu').value, p = index.lieux?.[k] || trace?.lieux?.[k] || WAYPOINTS[k];
     $('#dlgGerer').close();

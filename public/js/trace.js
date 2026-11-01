@@ -63,8 +63,8 @@ function simplifier(pts, tolM = 6) {
 
 /* ───────────── altitudes : IGN (Géoplateforme), sinon Open-Meteo ───────────── */
 async function lotIGN(sl) {
-  const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rgealti_world&zonly=true&delimiter=,'
-    + '&lon=' + sl.map(p => p[1].toFixed(5)).join(',') + '&lat=' + sl.map(p => p[0].toFixed(5)).join(',');
+  const url = 'https://data.geopf.fr/altimetrie/1.0/calcul/alti/rest/elevation.json?resource=ign_rgealti_world&zonly=true'
+    + '&lon=' + sl.map(p => p[1].toFixed(5)).join('%7C') + '&lat=' + sl.map(p => p[0].toFixed(5)).join('%7C');
   const r = await fetch(url);
   if (!r.ok) throw new Error('IGN HTTP ' + r.status);
   const j = await r.json();
@@ -135,7 +135,10 @@ async function profilEtape(parts, log, elesConnues) {
   const ech = reechantillonner(ligne, pas);
   let eles;
   if (elesConnues) eles = ech.map(p => elesConnues(p));
-  else eles = await altitudes(ech, log);
+  else {
+    try { eles = await altitudes(ech, log); }
+    catch (e) { return { prof: [], km: +long.toFixed(1), dplus: 0, dmoins: 0, erreurProfil: e.message }; }   // la distance reste connue
+  }
   const prof = []; ech.forEach((p, i) => prof.push(+p[2].toFixed(3), Math.round(eles[i])));
   return { prof, km: +long.toFixed(1), ...denivele(eles) };
 }
@@ -256,11 +259,29 @@ export async function construireTrace(log, forces = {}) {
   log('4/4 · Altitudes (service IGN)…');
   for (const [id, e] of Object.entries(etapes)) {
     log(`   Profil ${id.replace('e', 'étape ')}…`);
-    try { Object.assign(e, await profilEtape(e.parts, log)); }
-    catch (err) { avert.push(`Profil de ${id} indisponible : ${err.message}`); Object.assign(e, { prof: [], km: 0, dplus: 0, dmoins: 0 }); }
+    Object.assign(e, await profilEtape(e.parts, log));
+    if (e.erreurProfil) { avert.push(`Profil de ${id.replace('e', 'l’étape ')} manquant : ${e.erreurProfil}`); log('   ✕ ' + e.erreurProfil); delete e.erreurProfil; }
   }
   log('Terminé.');
   return { version: 1, construit: new Date().toISOString(), source: 'OpenStreetMap', etapes, lieux: precis, avertissements: avert };
+}
+
+/* ───────────── compléter uniquement les profils manquants ───────────── */
+export async function completerProfils(trace, log) {
+  const t = structuredClone(trace); let ok = 0, ko = 0;
+  for (const [id, e] of Object.entries(t.etapes || {})) {
+    const pl = e.parts.filter(p => !p.h).flatMap(p => paires(p.pts));
+    let km = 0; for (let i = 1; i < pl.length; i++) km += distKm(pl[i - 1], pl[i]);
+    e.km = +km.toFixed(1);                               // distance toujours recalculée
+    if (e.prof?.length) continue;
+    log(`Profil ${id.replace('e', 'étape ')}…`);
+    const r = await profilEtape(e.parts, log);
+    if (r.erreurProfil) { ko++; log('   ✕ ' + r.erreurProfil); continue; }
+    Object.assign(e, r); ok++; log('   ✓');
+  }
+  t.avertissements = (t.avertissements || []).filter(a => !/^Profil de/.test(a));
+  t.modifie = new Date().toISOString();
+  return { trace: t, ok, ko };
 }
 
 /* ───────────── GPX ───────────── */
